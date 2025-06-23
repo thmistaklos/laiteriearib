@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
 import { OrderType, UserSession, OrderStatus, Product } from '../types';
 import { INITIAL_PRODUCTS, ADMIN_EMAIL } from '../constants';
@@ -35,9 +34,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchInitialData = async () => {
       setIsLoading(true);
 
-      // Simulate fetching user session
       try {
-        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY / 2)); // Shorter delay for session
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY / 2));
         const storedUser = localStorage.getItem('userSession');
         if (storedUser) {
           const session = JSON.parse(storedUser) as UserSession;
@@ -54,14 +52,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsAdmin(false);
       }
 
-      // Simulate fetching orders
       try {
         await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY));
         const storedOrders = localStorage.getItem('orders');
         if (storedOrders) {
           setOrders(JSON.parse(storedOrders));
         } else {
-          setOrders([]); // Default to empty array if no orders stored
+          setOrders([]);
         }
       } catch (error) {
         console.error("Error loading orders from localStorage:", error);
@@ -69,7 +66,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setOrders([]);
       }
 
-      // Simulate fetching products
       try {
         await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY));
         const storedProducts = localStorage.getItem('products');
@@ -102,14 +98,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const session = { email, storeName };
     setUserSession(session);
     setIsAdmin(email === ADMIN_EMAIL);
-    // In a real app, this might be an API call that returns a token, then store the token.
     localStorage.setItem('userSession', JSON.stringify(session));
   }, []);
 
   const logout = useCallback(() => {
     setUserSession(null);
     setIsAdmin(false);
-    // In a real app, might need to invalidate token on server-side too.
     localStorage.removeItem('userSession');
   }, []);
 
@@ -122,7 +116,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setOrders(prevOrders => {
       const updatedOrders = [...prevOrders, newOrder];
-      localStorage.setItem('orders', JSON.stringify(updatedOrders)); 
+      localStorage.setItem('orders', JSON.stringify(updatedOrders));
       return updatedOrders;
     });
     return newOrder;
@@ -131,7 +125,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
     setOrders(prevOrders => {
       const updatedOrders = prevOrders.map(o => o.id === orderId ? { ...o, status } : o);
-      localStorage.setItem('orders', JSON.stringify(updatedOrders)); 
+      localStorage.setItem('orders', JSON.stringify(updatedOrders));
       return updatedOrders;
     });
   }, []);
@@ -170,7 +164,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.setItem('products', JSON.stringify(updatedProducts));
       } catch (e) {
         console.error("Failed to save products to localStorage after deletion:", e);
-        // State update will still proceed
       }
       return updatedProducts;
     });
@@ -179,48 +172,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const bulkAddProducts = useCallback((productsToAdd: Partial<Product>[]) => {
     setProducts(prevProducts => {
       const productMap = new Map(prevProducts.map(p => [p.id, p as Product]));
-      
+
       productsToAdd.forEach(pToAdd => {
         const defaultNewProduct: Product = {
-            id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            name: 'Unnamed Product', 
-            imageUrl: 'https://picsum.photos/seed/defaultproduct/200/200', 
-            price: 0,
-            quantityType: 'unit',
-            stock: 0,
-            description: '',
-            barcode: '',
+          id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: 'Unnamed Product',
+          imageUrl: 'https://picsum.photos/seed/defaultproduct/200/200',
+          price: 0,
+          quantityType: 'unit',
+          stock: 0,
+          description: '',
+          barcode: '',
         };
 
-        if (pToAdd.id && productMap.has(pToAdd.id)) { 
+        if (pToAdd.id && productMap.has(pToAdd.id)) {
           productMap.set(pToAdd.id, { ...(productMap.get(pToAdd.id)!), ...pToAdd } as Product);
-        } else { 
+        } else {
           const newId = pToAdd.id || defaultNewProduct.id;
           const fullNewProduct: Product = {
-            ...defaultNewProduct, 
-            ...pToAdd,            
-            id: newId,            
+            ...defaultNewProduct,
+            ...pToAdd,
+            id: newId,
           };
           if (!fullNewProduct.name?.trim()) fullNewProduct.name = defaultNewProduct.name;
           if (!fullNewProduct.imageUrl?.trim()) fullNewProduct.imageUrl = defaultNewProduct.imageUrl;
-          
+
           productMap.set(newId, fullNewProduct);
         }
       });
-      
+
       const updatedProductsArray = Array.from(productMap.values());
       localStorage.setItem('products', JSON.stringify(updatedProductsArray));
       return updatedProductsArray;
     });
   }, []);
 
-
   return (
-    <AppContext.Provider value={{ 
+    <AppContext.Provider value={{
       userSession, login, logout, isAdmin,
-      orders, addOrder, updateOrderStatus, 
+      orders, addOrder, updateOrderStatus,
       products, getProductById, addProduct, updateProduct, deleteProduct, bulkAddProducts,
-      isLoading 
+      isLoading
     }}>
       {isLoading ? (
         <div className="flex justify-center items-center h-screen">
