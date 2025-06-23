@@ -1,6 +1,14 @@
-import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  ReactNode,
+  useContext,
+  useCallback,
+} from 'react';
+import { supabase } from '../supabaseClient';
 import { OrderType, UserSession, OrderStatus, Product } from '../types';
-import { INITIAL_PRODUCTS, ADMIN_EMAIL } from '../constants';
+import { ADMIN_EMAIL } from '../constants';
 
 interface AppContextType {
   userSession: UserSession | null;
@@ -12,16 +20,17 @@ interface AppContextType {
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   products: Product[];
   getProductById: (productId: string) => Product | undefined;
-  addProduct: (productData: Omit<Product, 'id'>) => Product;
-  updateProduct: (productId: string, updatedProductData: Partial<Omit<Product, 'id'>>) => void;
-  deleteProduct: (productId: string) => void;
+  addProduct: (productData: Omit<Product, 'id'>) => Promise<Product | null>;
+  updateProduct: (
+    productId: string,
+    updatedProductData: Partial<Omit<Product, 'id'>>
+  ) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   bulkAddProducts: (productsToAdd: Partial<Product>[]) => void;
   isLoading: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-const SIMULATED_API_DELAY = 500; // ms
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -34,58 +43,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fetchInitialData = async () => {
       setIsLoading(true);
 
-      try {
-        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY / 2));
-        const storedUser = localStorage.getItem('userSession');
-        if (storedUser) {
-          const session = JSON.parse(storedUser) as UserSession;
-          setUserSession(session);
-          setIsAdmin(session.email === ADMIN_EMAIL);
-        } else {
-          setIsAdmin(false);
-          setUserSession(null);
-        }
-      } catch (error) {
-        console.error("Error loading user session from localStorage:", error);
-        localStorage.removeItem('userSession');
-        setUserSession(null);
-        setIsAdmin(false);
+      const storedUser = localStorage.getItem('userSession');
+      if (storedUser) {
+        const session = JSON.parse(storedUser) as UserSession;
+        setUserSession(session);
+        setIsAdmin(session.email === ADMIN_EMAIL);
       }
 
-      try {
-        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY));
-        const storedOrders = localStorage.getItem('orders');
-        if (storedOrders) {
-          setOrders(JSON.parse(storedOrders));
-        } else {
-          setOrders([]);
-        }
-      } catch (error) {
-        console.error("Error loading orders from localStorage:", error);
-        localStorage.removeItem('orders');
-        setOrders([]);
-      }
-
-      try {
-        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY));
-        const storedProducts = localStorage.getItem('products');
-        if (storedProducts && storedProducts !== "[]" && storedProducts !== "null") {
-          const parsedProducts = JSON.parse(storedProducts);
-          if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
-            setProducts(parsedProducts);
-          } else {
-            console.warn("Stored products data is not a valid array or is empty. Resetting to initial products.");
-            setProducts(INITIAL_PRODUCTS);
-            localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
-          }
-        } else {
-          setProducts(INITIAL_PRODUCTS);
-          localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
-        }
-      } catch (error) {
-        console.error("Error parsing products from localStorage or other product loading error:", error);
-        setProducts(INITIAL_PRODUCTS);
-        localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) {
+        console.error('Failed to fetch products:', error);
+        setProducts([]);
+      } else {
+        setProducts(data || []);
       }
 
       setIsLoading(false);
@@ -107,125 +77,138 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.removeItem('userSession');
   }, []);
 
-  const addOrder = useCallback((newOrderData: Omit<OrderType, 'id' | 'orderDate' | 'status'>): OrderType => {
-    const newOrder: OrderType = {
-      ...newOrderData,
-      id: `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      orderDate: new Date().toISOString(),
-      status: OrderStatus.PENDING,
-    };
-    setOrders(prevOrders => {
-      const updatedOrders = [...prevOrders, newOrder];
-      localStorage.setItem('orders', JSON.stringify(updatedOrders));
-      return updatedOrders;
-    });
-    return newOrder;
-  }, []);
+  const addOrder = useCallback(
+    (newOrderData: Omit<OrderType, 'id' | 'orderDate' | 'status'>): OrderType => {
+      const newOrder: OrderType = {
+        ...newOrderData,
+        id: `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        orderDate: new Date().toISOString(),
+        status: OrderStatus.PENDING,
+      };
+      setOrders(prev => [...prev, newOrder]);
+      return newOrder;
+    },
+    []
+  );
 
   const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
-    setOrders(prevOrders => {
-      const updatedOrders = prevOrders.map(o => o.id === orderId ? { ...o, status } : o);
-      localStorage.setItem('orders', JSON.stringify(updatedOrders));
-      return updatedOrders;
-    });
+    setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, status } : o)));
   }, []);
 
-  const getProductById = useCallback((productId: string): Product | undefined => {
-    return products.find(p => p.id === productId);
-  }, [products]);
+  const getProductById = useCallback(
+    (productId: string): Product | undefined => {
+      return products.find(p => p.id === productId);
+    },
+    [products]
+  );
 
-  const addProduct = useCallback((productData: Omit<Product, 'id'>): Product => {
-    const newProduct: Product = {
-      ...productData,
-      id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    };
-    setProducts(prevProducts => {
-      const updatedProducts = [...prevProducts, newProduct];
-      localStorage.setItem('products', JSON.stringify(updatedProducts));
-      return updatedProducts;
-    });
-    return newProduct;
-  }, []);
+  const addProduct = useCallback(
+    async (productData: Omit<Product, 'id'>): Promise<Product | null> => {
+      const { data, error } = await supabase
+        .from('products')
+        .insert([productData])
+        .select()
+        .single();
 
-  const updateProduct = useCallback((productId: string, updatedProductData: Partial<Omit<Product, 'id'>>) => {
-    setProducts(prevProducts => {
-      const updatedProducts = prevProducts.map(p =>
-        p.id === productId ? { ...p, ...updatedProductData } : p
-      );
-      localStorage.setItem('products', JSON.stringify(updatedProducts));
-      return updatedProducts;
-    });
-  }, []);
-
-  const deleteProduct = useCallback((productId: string) => {
-    setProducts(prevProducts => {
-      const updatedProducts = prevProducts.filter(p => p.id !== productId);
-      try {
-        localStorage.setItem('products', JSON.stringify(updatedProducts));
-      } catch (e) {
-        console.error("Failed to save products to localStorage after deletion:", e);
+      if (error) {
+        console.error('Error adding product to Supabase:', error);
+        return null;
       }
-      return updatedProducts;
-    });
+
+      setProducts(prev => [...prev, data]);
+      return data;
+    },
+    []
+  );
+
+  const updateProduct = useCallback(
+    async (
+      productId: string,
+      updatedProductData: Partial<Omit<Product, 'id'>>
+    ): Promise<void> => {
+      const { error } = await supabase
+        .from('products')
+        .update(updatedProductData)
+        .eq('id', productId);
+
+      if (error) {
+        console.error('Error updating product in Supabase:', error);
+        return;
+      }
+
+      setProducts(prev =>
+        prev.map(p => (p.id === productId ? { ...p, ...updatedProductData } : p))
+      );
+    },
+    []
+  );
+
+  const deleteProduct = useCallback(async (productId: string): Promise<void> => {
+    const { error } = await supabase.from('products').delete().eq('id', productId);
+
+    if (error) {
+      console.error('Error deleting product from Supabase:', error);
+      return;
+    }
+
+    setProducts(prev => prev.filter(p => p.id !== productId));
   }, []);
 
   const bulkAddProducts = useCallback((productsToAdd: Partial<Product>[]) => {
-    setProducts(prevProducts => {
-      const productMap = new Map(prevProducts.map(p => [p.id, p as Product]));
-
-      productsToAdd.forEach(pToAdd => {
-        const defaultNewProduct: Product = {
-          id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          name: 'Unnamed Product',
-          imageUrl: 'https://picsum.photos/seed/defaultproduct/200/200',
-          price: 0,
-          quantityType: 'unit',
-          stock: 0,
-          description: '',
-          barcode: '',
+    // Optional: You could implement Supabase batch insert here
+    setProducts(prev => {
+      const map = new Map(prev.map(p => [p.id, p]));
+      productsToAdd.forEach(p => {
+        const id = p.id || `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const fullProduct: Product = {
+          id,
+          name: p.name || 'Unnamed Product',
+          imageUrl: p.imageUrl || 'https://picsum.photos/seed/default/200/200',
+          price: p.price ?? 0,
+          quantityType: p.quantityType || 'unit',
+          stock: p.stock ?? 0,
+          description: p.description || '',
+          barcode: p.barcode || '',
         };
-
-        if (pToAdd.id && productMap.has(pToAdd.id)) {
-          productMap.set(pToAdd.id, { ...(productMap.get(pToAdd.id)!), ...pToAdd } as Product);
-        } else {
-          const newId = pToAdd.id || defaultNewProduct.id;
-          const fullNewProduct: Product = {
-            ...defaultNewProduct,
-            ...pToAdd,
-            id: newId,
-          };
-          if (!fullNewProduct.name?.trim()) fullNewProduct.name = defaultNewProduct.name;
-          if (!fullNewProduct.imageUrl?.trim()) fullNewProduct.imageUrl = defaultNewProduct.imageUrl;
-
-          productMap.set(newId, fullNewProduct);
-        }
+        map.set(id, fullProduct);
       });
-
-      const updatedProductsArray = Array.from(productMap.values());
-      localStorage.setItem('products', JSON.stringify(updatedProductsArray));
-      return updatedProductsArray;
+      return Array.from(map.values());
     });
   }, []);
 
   return (
-    <AppContext.Provider value={{
-      userSession, login, logout, isAdmin,
-      orders, addOrder, updateOrderStatus,
-      products, getProductById, addProduct, updateProduct, deleteProduct, bulkAddProducts,
-      isLoading
-    }}>
+    <AppContext.Provider
+      value={{
+        userSession,
+        login,
+        logout,
+        isAdmin,
+        orders,
+        addOrder,
+        updateOrderStatus,
+        products,
+        getProductById,
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        bulkAddProducts,
+        isLoading,
+      }}
+    >
       {isLoading ? (
         <div className="flex justify-center items-center h-screen">
           <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
         </div>
-      ) : children}
+      ) : (
+        children
+      )}
     </AppContext.Provider>
   );
 };
 
 export const useAppContext = (): AppContextType => {
   const context = useContext(AppContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAppContext must be used within an AppProvider');
   }
   return context;
