@@ -1,0 +1,6 @@
+{
+  "name": "Laiterie Arib",
+  "description": "A simple and clean app for product orders by point-of-sale locations. Users can enter store name and email, browse products, select quantities, and submit orders to an admin dashboard.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
