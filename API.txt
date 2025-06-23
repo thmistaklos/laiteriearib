@@ -1,0 +1,5 @@
+AIzaSyDn7_tiMuYjGNc_TZGA3VZuRE7ZhPpv1Jc
+
+http://localhost:5173/
+
+GEMINI_API_KEY=AIzaSyDn7_tiMuYjGNc_TZGA3VZuRE7ZhPpv1Jc
