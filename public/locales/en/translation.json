@@ -65,14 +65,18 @@
   "productAdmin.modal.stockNonNegative": "Stock must be a non-negative number.",
   "productAdmin.modal.quantityTypeRequired": "Quantity type is required.",
   "productAdmin.modal.confirmDelete": "Are you sure you want to delete this product? This action cannot be undone.",
+  "productAdmin.productDeletedSuccess": "Product successfully deleted.",
   "productAdmin.quantityUnit": "Unit",
   "productAdmin.quantityKg": "Kg",
   "productAdmin.importProducts": "Import Products (CSV)",
   "productAdmin.exportProducts": "Export Products",
-  "productAdmin.import.success": "Products imported successfully.",
+  "productAdmin.import.success": "Products imported successfully ({{count}} products).",
   "productAdmin.import.error": "Error importing products: {{error}}",
+  "productAdmin.import.errorNoValid": "Import failed: {{error}}",
   "productAdmin.import.fileRequired": "Please select a CSV file to import.",
   "productAdmin.import.processing": "Processing import...",
+  "productAdmin.confirmChangesSaved": "Confirm All Changes Saved",
+  "productAdmin.allChangesConfirmed": "All recent product changes have been successfully saved to the system.",
   "dashboard.title": "Admin Dashboard",
   "dashboard.subtitle": "View and manage all incoming orders.",
   "dashboard.noOrders": "No orders have been submitted yet.",
@@ -115,5 +119,6 @@
   "aria.removeOrderItem": "Remove {{productName}} from order",
   "productCard.quantity": "Quantity",
   "currency.format": "{{amount}} DZD",
-  "general.loading": "Loading..."
+  "general.loading": "Loading...",
+  "footer.allRightsReserved": "all rights reserved by {{owner}} © {{year}}"
 }

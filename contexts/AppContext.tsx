@@ -16,11 +16,13 @@ interface AppContextType {
   addProduct: (productData: Omit<Product, 'id'>) => Product;
   updateProduct: (productId: string, updatedProductData: Partial<Omit<Product, 'id'>>) => void;
   deleteProduct: (productId: string) => void;
-  bulkAddProducts: (productsToAdd: Partial<Product>[]) => void; // New function
+  bulkAddProducts: (productsToAdd: Partial<Product>[]) => void;
   isLoading: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const SIMULATED_API_DELAY = 500; // ms
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -30,50 +32,84 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    try {
-      const storedUser = localStorage.getItem('userSession');
-      if (storedUser) {
-        const session: UserSession = JSON.parse(storedUser);
-        setUserSession(session);
-        setIsAdmin(session.email === ADMIN_EMAIL);
-      } else {
+    const fetchInitialData = async () => {
+      setIsLoading(true);
+
+      // Simulate fetching user session
+      try {
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY / 2)); // Shorter delay for session
+        const storedUser = localStorage.getItem('userSession');
+        if (storedUser) {
+          const session = JSON.parse(storedUser) as UserSession;
+          setUserSession(session);
+          setIsAdmin(session.email === ADMIN_EMAIL);
+        } else {
+          setIsAdmin(false);
+          setUserSession(null);
+        }
+      } catch (error) {
+        console.error("Error loading user session from localStorage:", error);
+        localStorage.removeItem('userSession');
+        setUserSession(null);
         setIsAdmin(false);
       }
 
-      const storedOrders = localStorage.getItem('orders');
-      if (storedOrders) {
-        setOrders(JSON.parse(storedOrders));
+      // Simulate fetching orders
+      try {
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY));
+        const storedOrders = localStorage.getItem('orders');
+        if (storedOrders) {
+          setOrders(JSON.parse(storedOrders));
+        } else {
+          setOrders([]); // Default to empty array if no orders stored
+        }
+      } catch (error) {
+        console.error("Error loading orders from localStorage:", error);
+        localStorage.removeItem('orders');
+        setOrders([]);
       }
 
-      const storedProducts = localStorage.getItem('products');
-      if (storedProducts) {
-        setProducts(JSON.parse(storedProducts));
-      } else {
+      // Simulate fetching products
+      try {
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_API_DELAY));
+        const storedProducts = localStorage.getItem('products');
+        if (storedProducts && storedProducts !== "[]" && storedProducts !== "null") {
+          const parsedProducts = JSON.parse(storedProducts);
+          if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
+            setProducts(parsedProducts);
+          } else {
+            console.warn("Stored products data is not a valid array or is empty. Resetting to initial products.");
+            setProducts(INITIAL_PRODUCTS);
+            localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
+          }
+        } else {
+          setProducts(INITIAL_PRODUCTS);
+          localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
+        }
+      } catch (error) {
+        console.error("Error parsing products from localStorage or other product loading error:", error);
         setProducts(INITIAL_PRODUCTS);
         localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
       }
-    } catch (error) {
-      console.error("Error loading data from localStorage:", error);
-      // Fallback for products if corrupted
-      if (products.length === 0 && !localStorage.getItem('products')) { // Check if products is empty AND not in localStorage
-        setProducts(INITIAL_PRODUCTS);
-        localStorage.setItem('products', JSON.stringify(INITIAL_PRODUCTS));
-      }
-    }
-    setIsLoading(false);
-  }, []); // products removed from dependency array to avoid loop if localStorage is corrupted.
+
+      setIsLoading(false);
+    };
+
+    fetchInitialData();
+  }, []);
 
   const login = useCallback((email: string, storeName: string) => {
     const session = { email, storeName };
     setUserSession(session);
     setIsAdmin(email === ADMIN_EMAIL);
+    // In a real app, this might be an API call that returns a token, then store the token.
     localStorage.setItem('userSession', JSON.stringify(session));
   }, []);
 
   const logout = useCallback(() => {
     setUserSession(null);
     setIsAdmin(false);
+    // In a real app, might need to invalidate token on server-side too.
     localStorage.removeItem('userSession');
   }, []);
 
@@ -86,7 +122,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setOrders(prevOrders => {
       const updatedOrders = [...prevOrders, newOrder];
-      localStorage.setItem('orders', JSON.stringify(updatedOrders));
+      localStorage.setItem('orders', JSON.stringify(updatedOrders)); 
       return updatedOrders;
     });
     return newOrder;
@@ -95,7 +131,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateOrderStatus = useCallback((orderId: string, status: OrderStatus) => {
     setOrders(prevOrders => {
       const updatedOrders = prevOrders.map(o => o.id === orderId ? { ...o, status } : o);
-      localStorage.setItem('orders', JSON.stringify(updatedOrders));
+      localStorage.setItem('orders', JSON.stringify(updatedOrders)); 
       return updatedOrders;
     });
   }, []);
@@ -130,28 +166,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteProduct = useCallback((productId: string) => {
     setProducts(prevProducts => {
       const updatedProducts = prevProducts.filter(p => p.id !== productId);
-      localStorage.setItem('products', JSON.stringify(updatedProducts));
+      try {
+        localStorage.setItem('products', JSON.stringify(updatedProducts));
+      } catch (e) {
+        console.error("Failed to save products to localStorage after deletion:", e);
+        // State update will still proceed
+      }
       return updatedProducts;
     });
   }, []);
 
   const bulkAddProducts = useCallback((productsToAdd: Partial<Product>[]) => {
     setProducts(prevProducts => {
-      const productMap = new Map(prevProducts.map(p => [p.id, p]));
+      const productMap = new Map(prevProducts.map(p => [p.id, p as Product]));
       
       productsToAdd.forEach(pToAdd => {
-        if (pToAdd.id && productMap.has(pToAdd.id)) {
-          // Update existing product
-          productMap.set(pToAdd.id, { ...productMap.get(pToAdd.id)!, ...pToAdd } as Product);
-        } else {
-          // Add new product
-          const newId = pToAdd.id || `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const defaultNewProduct: Product = {
+            id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: 'Unnamed Product', 
+            imageUrl: 'https://picsum.photos/seed/defaultproduct/200/200', 
+            price: 0,
+            quantityType: 'unit',
+            stock: 0,
+            description: '',
+            barcode: '',
+        };
+
+        if (pToAdd.id && productMap.has(pToAdd.id)) { 
+          productMap.set(pToAdd.id, { ...(productMap.get(pToAdd.id)!), ...pToAdd } as Product);
+        } else { 
+          const newId = pToAdd.id || defaultNewProduct.id;
           const fullNewProduct: Product = {
-            name: '', // Default values, should be overridden by pToAdd
-            imageUrl: '',
-            ...pToAdd, // Spread the partial product data
-            id: newId, // Ensure it has an ID
+            ...defaultNewProduct, 
+            ...pToAdd,            
+            id: newId,            
           };
+          if (!fullNewProduct.name?.trim()) fullNewProduct.name = defaultNewProduct.name;
+          if (!fullNewProduct.imageUrl?.trim()) fullNewProduct.imageUrl = defaultNewProduct.imageUrl;
+          
           productMap.set(newId, fullNewProduct);
         }
       });
@@ -170,8 +222,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       products, getProductById, addProduct, updateProduct, deleteProduct, bulkAddProducts,
       isLoading 
     }}>
-      {!isLoading && children}
-      {isLoading && <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div></div>}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-screen">
+          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      ) : children}
     </AppContext.Provider>
   );
 };

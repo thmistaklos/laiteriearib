@@ -2,12 +2,9 @@
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import 'jspdf-autotable'; // This import should augment the jsPDF prototype
 
-// Extend jsPDF with autoTable if it's not already there (common in module environments)
-interface jsPDFWithAutoTable extends jsPDF {
-  autoTable: (options: any) => jsPDF;
-}
+// The custom interface jsPDFWithAutoTable has been removed.
 
 export const exportToCsv = (data: any[], filename: string, headers?: string[]) => {
   const csv = Papa.unparse(data, { header: !!headers, columns: headers });
@@ -34,7 +31,8 @@ export const exportToPdf = (
     filename: string,
     isRTL: boolean = false
 ) => {
-    const doc = new jsPDF() as jsPDFWithAutoTable;
+    const doc = new jsPDF(); // Initialize jsPDF instance directly.
+                               // Type is jsPDF, which should be augmented by jspdf-autotable.
 
     // For RTL, jsPDF doesn't natively support it well for text rendering without plugins or specific fonts.
     // This is a basic setup. For better Arabic rendering, embedding an Arabic font (e.g., Amiri) is recommended.
@@ -45,7 +43,9 @@ export const exportToPdf = (
     doc.text(title, 14, 16);
 
     // Add table
-    doc.autoTable({
+    // The `autoTable` method should be available on `doc` due to module augmentation.
+    // If UserOptions type from 'jspdf-autotable' is needed for options, it can be imported.
+    (doc as any).autoTable({ // Using `as any` temporarily if autoTable specific options type is complex or not readily available
         head: headers,
         body: body,
         startY: 20,
