@@ -21,13 +21,17 @@ const MainScreen: React.FC = () => {
   const [showOrderSubmittedModal, setShowOrderSubmittedModal] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
+  const visibleProducts = useMemo(() => {
+    return products.filter(product => product.isVisible !== false); // Undefined or true means visible
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
-    if (!searchTerm) return products;
-    return products.filter(product =>
+    if (!searchTerm) return visibleProducts;
+    return visibleProducts.filter(product =>
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [searchTerm, products]);
+  }, [searchTerm, visibleProducts]);
 
   const handleAddToCart = useCallback((product: Product, quantity: number) => {
     setCurrentOrderItems(prevItems => {
@@ -66,7 +70,6 @@ const MainScreen: React.FC = () => {
       alert(t('main.emptyOrder')); 
       return;
     }
-    // addOrder returns Promise<OrderType | null>
     const submittedOrder: OrderType | null = await addOrder({
       storeName: userSession.storeName,
       userEmail: userSession.email,
@@ -82,7 +85,6 @@ const MainScreen: React.FC = () => {
           navigate(`/confirmation/${submittedOrder.id}`);
       }, 2000);
     } else {
-      // Handle the case where order submission might have failed or returned null
       console.error("Order submission failed or submittedOrder is null/undefined.");
       alert(t('main.orderSubmissionFailed', {defaultValue: 'Order submission failed. Please try again.'})); 
     }
@@ -150,7 +152,7 @@ const MainScreen: React.FC = () => {
                 </div>
               )
             ) : (
-               products.length === 0 ? (
+               visibleProducts.length === 0 ? ( // Check against visibleProducts instead of products
                 <p className="text-center text-gray-500 py-10 text-lg">{t('main.noProductsAvailable')}</p>
               ) : (
                 <p className="text-center text-gray-500 py-10 text-lg">{t('main.noProductsFound')}</p>

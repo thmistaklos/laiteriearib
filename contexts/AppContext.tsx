@@ -1,5 +1,6 @@
+
 import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
-import { OrderType, UserSession, OrderStatus, Product } from '../types';
+import { OrderType, UserSession, OrderStatus, Product, OrderItemType } from '../types';
 import { INITIAL_PRODUCTS, ADMIN_EMAIL } from '../constants';
 import { supabase } from '../supabaseClient'; // Import Supabase client
 
@@ -27,11 +28,14 @@ interface AppContextType {
   deleteProduct: (productId: string) => Promise<void>;
   bulkAddProducts: (productsToAdd: Partial<Product>[]) => Promise<void>;
   isLoading: boolean;
+  showAdminOrderNotification: boolean;
+  markAdminDashboardViewed: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const SESSION_STORAGE_KEY = 'supabaseSessionId';
+const ADMIN_LAST_DASHBOARD_VIEW_TIMESTAMP_KEY = 'adminLastDashboardViewTimestamp';
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -39,12 +43,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [orders, setOrders] = useState<OrderType[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAdminOrderNotification, setShowAdminOrderNotification] = useState(false);
+
+  const checkAdminNotification = useCallback(() => {
+    if (isAdmin) {
+      const lastViewTimestamp = localStorage.getItem(ADMIN_LAST_DASHBOARD_VIEW_TIMESTAMP_KEY);
+      const hasNewPendingOrders = orders.some(order => 
+        order.status === OrderStatus.PENDING && 
+        (!lastViewTimestamp || new Date(order.orderDate).getTime() > new Date(lastViewTimestamp).getTime())
+      );
+      setShowAdminOrderNotification(hasNewPendingOrders);
+    } else {
+      setShowAdminOrderNotification(false);
+    }
+  }, [orders, isAdmin]);
+
+  useEffect(() => {
+    checkAdminNotification();
+  }, [checkAdminNotification]);
+
 
   const fetchAllData = useCallback(async (currentSessionId?: string) => {
     setIsLoading(true);
     let sessionIsValid = false;
 
-    // 1. Attempt to load user session
     if (currentSessionId) {
       try {
         const { data: sessionData, error: sessionError } = await supabase
@@ -54,7 +76,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           .single();
 
         if (sessionError || !sessionData) {
-          if (sessionError && sessionError.code !== 'PGRST116') { // PGRST116: single row not found
+          if (sessionError && sessionError.code !== 'PGRST116') {
              console.error('Error fetching session - message:', sessionError.message, "Details:", sessionError);
           }
           localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -65,7 +87,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setUserSession(session);
           setIsAdmin(session.email === ADMIN_EMAIL);
           sessionIsValid = true;
-          // Update last_active_at
           await supabase.from('sessions').update({ last_active_at: new Date().toISOString() }).eq('id', currentSessionId);
         }
       } catch (error) {
@@ -79,31 +100,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsAdmin(false);
     }
 
-
-    // 2. Fetch products
     try {
       const { data: dbProducts, error: productError } = await supabase.from('products').select('*');
       if (productError) {
         console.error("Error fetching products - message:", productError.message, "Details:", productError);
-        setProducts(INITIAL_PRODUCTS); // Fallback
+        setProducts(INITIAL_PRODUCTS.map(p => ({...p, isVisible: p.isVisible === undefined ? true : p.isVisible }))); 
       } else if (!dbProducts || dbProducts.length === 0) {
         console.log("No products in DB, seeding...");
-        const { error: seedError } = await supabase.from('products').insert(INITIAL_PRODUCTS.map(p => ({...p}))); // Ensure it's a new object array
+        const seedProducts = INITIAL_PRODUCTS.map(p => ({...p, isVisible: p.isVisible === undefined ? true : p.isVisible }));
+        const { error: seedError } = await supabase.from('products').insert(seedProducts); 
         if (seedError) {
           console.error("Error seeding products - message:", seedError.message, "Details:", seedError);
-          setProducts(INITIAL_PRODUCTS); // Fallback if seed fails
+          setProducts(INITIAL_PRODUCTS.map(p => ({...p, isVisible: p.isVisible === undefined ? true : p.isVisible }))); 
         } else {
-          setProducts(INITIAL_PRODUCTS);
+          setProducts(INITIAL_PRODUCTS.map(p => ({...p, isVisible: p.isVisible === undefined ? true : p.isVisible })));
         }
       } else {
-        setProducts(dbProducts);
+        setProducts(dbProducts.map(p => ({...p, isVisible: p.isVisible === undefined || p.isVisible === null ? true : p.isVisible })));
       }
     } catch (error) {
       console.error("Critical error fetching products:", (error as Error).message || error);
-      setProducts(INITIAL_PRODUCTS); // Fallback
+      setProducts(INITIAL_PRODUCTS.map(p => ({...p, isVisible: p.isVisible === undefined ? true : p.isVisible }))); 
     }
 
-    // 3. Fetch orders
     try {
       const { data: dbOrders, error: orderError } = await supabase.from('orders').select('*');
       if (orderError) {
@@ -116,7 +135,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.error("Critical error fetching orders:", (error as Error).message || error);
       setOrders([]);
     }
-
     setIsLoading(false);
     return sessionIsValid;
   }, []);
@@ -147,9 +165,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
     setUserSession(sessionToSave);
-    setIsAdmin(email === ADMIN_EMAIL);
+    setIsAdmin(email === ADMIN_EMAIL); 
+    await fetchAllData(sessionId); 
     setIsLoading(false);
-  }, []);
+  }, [fetchAllData]);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
@@ -191,16 +210,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return data;
   }, []);
 
-  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
+  const updateOrderStatus = useCallback(async (orderId: string, newStatus: OrderStatus) => {
     setIsLoading(true);
-    const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) {
+      console.error("Order not found for status update:", orderId);
+      setIsLoading(false);
+      return;
+    }
+
+    const oldStatus = orderToUpdate.status;
+
+    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
     if (error) {
       console.error("Error updating order status in Supabase - message:", error.message, "Details:", error);
     } else {
-      setOrders(prevOrders => prevOrders.map(o => o.id === orderId ? { ...o, status } : o));
+      setOrders(prevOrders => prevOrders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      
+      // Stock adjustment logic
+      if (newStatus === OrderStatus.DELIVERED && oldStatus !== OrderStatus.DELIVERED) {
+        console.log(`Order ${orderId} DELIVERED. Adjusting stock.`);
+        const productUpdates: PromiseLike<any>[] = []; // Changed Promise<any>[] to PromiseLike<any>[]
+        const updatedProductsLocally: Product[] = [];
+
+        for (const item of orderToUpdate.items) {
+          const product = products.find(p => p.id === item.product.id);
+          if (product && typeof product.stock === 'number') {
+            const newStock = Math.max(0, product.stock - item.quantity); // Prevent negative stock visually
+            productUpdates.push(
+              supabase.from('products').update({ stock: newStock }).eq('id', product.id)
+            );
+            updatedProductsLocally.push({ ...product, stock: newStock });
+          } else {
+             console.warn(`Product ${item.product.id} not found or stock undefined for order ${orderId}`);
+          }
+        }
+        
+        try {
+          await Promise.all(productUpdates);
+          // Update local products state
+          setProducts(prevProducts => {
+            return prevProducts.map(p => {
+              const updatedVersion = updatedProductsLocally.find(up => up.id === p.id);
+              return updatedVersion || p;
+            });
+          });
+          console.log(`Stock updated for order ${orderId}`);
+        } catch (stockUpdateError) {
+          console.error("Error updating product stocks in Supabase - message:", (stockUpdateError as Error).message, "Details:", stockUpdateError);
+          // Potentially revert order status or notify admin of stock update failure
+        }
+      }
     }
     setIsLoading(false);
-  }, []);
+  }, [orders, products]);
 
   const getProductById = useCallback((productId: string): Product | undefined => {
     return products.find(p => p.id === productId);
@@ -211,6 +274,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newProduct: Product = {
       ...productData,
       id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      isVisible: productData.isVisible === undefined ? true : productData.isVisible,
     };
     
     const { data, error } = await supabase.from('products').insert(newProduct).select().single();
@@ -221,19 +285,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return null;
     }
     if (data) {
-       setProducts(prevProducts => [...prevProducts, data]);
+       setProducts(prevProducts => [...prevProducts, {...data, isVisible: data.isVisible === undefined || data.isVisible === null ? true : data.isVisible} as Product]);
     }
     setIsLoading(false);
-    return data;
+    return data ? {...data, isVisible: data.isVisible === undefined || data.isVisible === null ? true : data.isVisible} as Product : null;
   }, []);
 
   const updateProduct = useCallback(async (productId: string, updatedProductData: Partial<Omit<Product, 'id'>>) => {
     setIsLoading(true);
-    const { data, error } = await supabase.from('products').update(updatedProductData).eq('id', productId).select().single();
+    const productToUpdate = { ...updatedProductData };
+    // Ensure isVisible is explicitly set if passed, otherwise it might be removed by Partial
+    if (updatedProductData.isVisible !== undefined) {
+      productToUpdate.isVisible = updatedProductData.isVisible;
+    }
+
+    const { data, error } = await supabase.from('products').update(productToUpdate).eq('id', productId).select().single();
     if (error) {
       console.error("Error updating product in Supabase - message:", error.message, "Details:", error);
     } else if (data) {
-      setProducts(prevProducts => prevProducts.map(p => p.id === productId ? data : p));
+      setProducts(prevProducts => prevProducts.map(p => p.id === productId ? {...data, isVisible: data.isVisible === undefined || data.isVisible === null ? true : data.isVisible} as Product : p));
     }
     setIsLoading(false);
   }, []);
@@ -253,18 +323,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsLoading(true);
     
     const productsToUpsert = productsToAdd.map(pToAdd => {
-        const fullProductData: Product = {
-            id: pToAdd.id || `prod_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`, 
+        const finalProduct: Product = {
+            id: pToAdd.id || `prod_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`,
             name: pToAdd.name || 'Unnamed Product',
             description: pToAdd.description || '',
-            price: pToAdd.price === undefined ? 0 : pToAdd.price,
+            price: Number(pToAdd.price ?? 0), // Ensures price is a number, defaults to 0 if pToAdd.price is null/undefined
             imageUrl: pToAdd.imageUrl || 'https://picsum.photos/seed/defaultproduct/200/200',
             barcode: pToAdd.barcode || '',
             quantityType: pToAdd.quantityType || 'unit',
-            stock: pToAdd.stock === undefined ? 0 : pToAdd.stock,
-            ...pToAdd, 
+            stock: Number(pToAdd.stock ?? 0), // Ensures stock is a number, defaults to 0 if pToAdd.stock is null/undefined
+            isVisible: typeof pToAdd.isVisible === 'boolean' ? pToAdd.isVisible : true, // Ensures isVisible is boolean, defaults to true
         };
-        return fullProductData;
+        return finalProduct;
     });
 
     const { error: upsertError } = await supabase.from('products').upsert(productsToUpsert, { onConflict: 'id' });
@@ -273,15 +343,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error("Error bulk adding/updating products in Supabase - message:", upsertError.message, "Details:", upsertError);
     }
     
+    // Re-fetch all products to ensure local state is consistent with DB after upsert
     const { data: allProductsData, error: fetchError } = await supabase.from('products').select('*');
     if (fetchError) {
         console.error("Error re-fetching products after bulk add - message:", fetchError.message, "Details:", fetchError);
     } else if (allProductsData) {
-        setProducts(allProductsData);
+        setProducts(allProductsData.map(p => ({...p, isVisible: p.isVisible === undefined || p.isVisible === null ? true : p.isVisible })));
     }
 
     setIsLoading(false);
   }, []);
+
+  const markAdminDashboardViewed = useCallback(() => {
+    if (isAdmin) {
+      localStorage.setItem(ADMIN_LAST_DASHBOARD_VIEW_TIMESTAMP_KEY, new Date().toISOString());
+      setShowAdminOrderNotification(false);
+    }
+  }, [isAdmin]);
 
 
   return (
@@ -289,7 +367,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       userSession, login, logout, isAdmin,
       orders, addOrder, updateOrderStatus, 
       products, getProductById, addProduct, updateProduct, deleteProduct, bulkAddProducts,
-      isLoading 
+      isLoading,
+      showAdminOrderNotification,
+      markAdminDashboardViewed
     }}>
       {isLoading && !children ? (
         <div className="flex justify-center items-center h-screen">

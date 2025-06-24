@@ -8,6 +8,7 @@ export interface Product {
   barcode?: string;
   quantityType?: 'unit' | 'kg'; // Default 'unit'
   stock?: number; // Current stock level
+  isVisible?: boolean; // Default true. If false, product is hidden from customer view.
 }
 
 export interface OrderItemType {

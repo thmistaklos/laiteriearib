@@ -8,6 +8,20 @@ import InputField from '../components/InputField';
 import { exportToCsv, exportToXlsx, exportToPdf } from '../utils/exportUtils';
 import Papa from 'papaparse';
 
+const EyeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+  </svg>
+);
+
+const EyeSlashIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+  </svg>
+);
+
+
 const ProductAdminScreen: React.FC = () => {
   const { products, addProduct, updateProduct, deleteProduct, isAdmin, bulkAddProducts } = useAppContext();
   const { t, language } = useTranslation();
@@ -37,6 +51,7 @@ const ProductAdminScreen: React.FC = () => {
     barcode: '',
     quantityType: 'unit',
     stock: 0,
+    isVisible: true,
   };
 
   const openModalForAdd = () => {
@@ -53,6 +68,7 @@ const ProductAdminScreen: React.FC = () => {
       ...product,
       quantityType: product.quantityType || 'unit',
       stock: product.stock === undefined ? 0 : product.stock,
+      isVisible: product.isVisible === undefined ? true : product.isVisible,
     });
     setIsEditMode(true);
     setErrors({});
@@ -92,32 +108,33 @@ const ProductAdminScreen: React.FC = () => {
         barcode: currentProduct.barcode || '',
         quantityType: currentProduct.quantityType || 'unit',
         stock: Number(currentProduct.stock) || 0,
+        isVisible: currentProduct.isVisible === undefined ? true : currentProduct.isVisible,
     };
     
     let success = false;
-    setConfirmationAlert(null); // Clear previous alerts
+    setConfirmationAlert(null); 
 
     if (isEditMode && currentProduct.id) {
       try {
         await updateProduct(currentProduct.id, productData);
         success = true;
-        setConfirmationAlert(t('productAdmin.productUpdatedSuccess', { defaultValue: "Product updated successfully."}));
+        setConfirmationAlert(t('productAdmin.productUpdatedSuccess'));
       } catch (error) {
         console.error("Error updating product:", error);
-        setConfirmationAlert(t('productAdmin.productSaveFailed', { defaultValue: "Failed to update product."}));
+        setConfirmationAlert(t('productAdmin.productSaveFailed'));
       }
     } else {
       try {
         const newProd = await addProduct(productData as Product);
         if (newProd) {
           success = true;
-          setConfirmationAlert(t('productAdmin.productAddedSuccess', { defaultValue: "Product added successfully."}));
+          setConfirmationAlert(t('productAdmin.productAddedSuccess'));
         } else {
-          setConfirmationAlert(t('productAdmin.productSaveFailed', { defaultValue: "Failed to add product."}));
+          setConfirmationAlert(t('productAdmin.productSaveFailed'));
         }
       } catch (error) {
          console.error("Error adding product:", error);
-         setConfirmationAlert(t('productAdmin.productSaveFailed', { defaultValue: "Failed to add product."}));
+         setConfirmationAlert(t('productAdmin.productSaveFailed'));
       }
     }
 
@@ -137,10 +154,9 @@ const ProductAdminScreen: React.FC = () => {
       try {
         await deleteProduct(productId);
         setConfirmationAlert(t('productAdmin.productDeletedSuccess'));
-        // No need to set hasPendingConfirmation for delete, or decide if it should trigger "confirm saves"
       } catch (error) {
         console.error("Error deleting product:", error);
-        setConfirmationAlert(t('productAdmin.productDeleteFailed', { defaultValue: "Failed to delete product."}));
+        setConfirmationAlert(t('productAdmin.productDeleteFailed'));
       }
        setTimeout(() => {
         setConfirmationAlert(null);
@@ -148,13 +164,35 @@ const ProductAdminScreen: React.FC = () => {
     }
   };
 
+  const handleToggleVisibility = async (product: Product) => {
+    setConfirmationAlert(null);
+    try {
+      await updateProduct(product.id, { isVisible: !(product.isVisible === undefined ? true : product.isVisible) });
+      setConfirmationAlert(t('productAdmin.visibilityUpdatedSuccess', { name: product.name }));
+      setHasPendingConfirmation(true);
+    } catch (error) {
+      console.error("Error toggling product visibility:", error);
+      setConfirmationAlert(t('productAdmin.visibilityUpdateFailed', { name: product.name }));
+    }
+    setTimeout(() => {
+        setConfirmationAlert(null);
+    }, 3000);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setCurrentProduct(prev => ({ 
-        ...prev, 
-        [name]: (name === 'price' || name === 'stock') ? parseFloat(value) : value 
-    }));
-     if (errors[name]) {
+    const { name, value, type } = e.target;
+    
+    if (type === 'checkbox') {
+        const { checked } = e.target as HTMLInputElement;
+        setCurrentProduct(prev => ({ ...prev, [name]: checked }));
+    } else {
+        setCurrentProduct(prev => ({ 
+            ...prev, 
+            [name]: (name === 'price' || name === 'stock') ? parseFloat(value) : value 
+        }));
+    }
+    
+    if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
@@ -189,7 +227,8 @@ const ProductAdminScreen: React.FC = () => {
       imageUrl: p.imageUrl,
       barcode: p.barcode || '',
       quantityType: p.quantityType || 'unit',
-      stock: p.stock !== undefined ? p.stock : ''
+      stock: p.stock !== undefined ? p.stock : '',
+      isVisible: p.isVisible === undefined ? true : p.isVisible, // Default to true if undefined
     }));
 
     const filename = `products_export_${new Date().toISOString().split('T')[0]}`;
@@ -200,12 +239,13 @@ const ProductAdminScreen: React.FC = () => {
       } else if (format === 'xlsx') {
         exportToXlsx(dataToExport, filename, 'Products');
       } else if (format === 'pdf') {
-        const headers = [[t('productAdmin.table.name'), t('productAdmin.table.price'), t('productAdmin.table.stock'), t('productAdmin.table.type')]];
+        const headers = [[t('productAdmin.table.name'), t('productAdmin.table.price'), t('productAdmin.table.stock'), t('productAdmin.table.type'), t('productAdmin.table.visibility')]];
         const body = dataToExport.map(p => [
           p.name,
           p.price !== '' ? t('currency.format', { amount: Number(p.price).toFixed(2) }) : 'N/A',
           p.stock,
-          p.quantityType === 'kg' ? t('productAdmin.quantityKg') : t('productAdmin.quantityUnit')
+          p.quantityType === 'kg' ? t('productAdmin.quantityKg') : t('productAdmin.quantityUnit'),
+          p.isVisible ? t('productAdmin.visible') : t('productAdmin.hidden')
         ]);
         exportToPdf(t('productAdmin.exportProducts'), headers, body, filename, language === 'ar');
       }
@@ -231,7 +271,7 @@ const ProductAdminScreen: React.FC = () => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: async (results) => { // Make complete callback async
+      complete: async (results) => { 
         try {
           const mappedProducts: Partial<Product>[] = results.data.map((row: any): Partial<Product> => {
             const id = row.id ? String(row.id).trim() : undefined;
@@ -252,6 +292,21 @@ const ProductAdminScreen: React.FC = () => {
             const parsedStock = stockString !== '' ? parseInt(stockString, 10) : undefined;
             const stock = (parsedStock !== undefined && !isNaN(parsedStock)) ? parsedStock : undefined;
 
+            let isVisibleValue: boolean | undefined = undefined;
+            if (row.isVisible !== undefined && row.isVisible !== null) {
+                const isVisibleString = String(row.isVisible).trim().toLowerCase();
+                if (isVisibleString === 'true' || isVisibleString === '1') {
+                    isVisibleValue = true;
+                } else if (isVisibleString === 'false' || isVisibleString === '0') {
+                    isVisibleValue = false;
+                } else {
+                    isVisibleValue = true; // Default for unrecognized string
+                }
+            } else {
+              isVisibleValue = true; // Default if column missing or empty
+            }
+
+
             return {
               id: id || undefined, 
               name: name || undefined,
@@ -261,6 +316,7 @@ const ProductAdminScreen: React.FC = () => {
               barcode: barcode || undefined,
               quantityType: finalQuantityType,
               stock,
+              isVisible: isVisibleValue,
             };
           });
 
@@ -269,9 +325,9 @@ const ProductAdminScreen: React.FC = () => {
           );
 
           if (importedProducts.length > 0) {
-            await bulkAddProducts(importedProducts); // Await the async operation
+            await bulkAddProducts(importedProducts); 
             setImportSuccess(t('productAdmin.import.success', { count: importedProducts.length }));
-            setHasPendingConfirmation(true); // Set after successful bulk add
+            setHasPendingConfirmation(true);
           } else {
             setImportError(t('productAdmin.import.errorNoValid', {error: results.errors.length > 0 ? results.errors[0].message : "No valid product data found in CSV or CSV is empty."}));
           }
@@ -349,7 +405,7 @@ const ProductAdminScreen: React.FC = () => {
           </div>
         </header>
 
-        {confirmationAlert && <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md animate-pulse">{confirmationAlert}</div>}
+        {confirmationAlert && <div className={`mb-4 p-3 rounded-md animate-pulse ${confirmationAlert.includes('Failed') || confirmationAlert.includes('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{confirmationAlert}</div>}
         {importError && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">{importError}</div>}
         {importSuccess && <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-md">{importSuccess}</div>}
 
@@ -368,11 +424,14 @@ const ProductAdminScreen: React.FC = () => {
                   <th className="px-6 py-3 text-left rtl:text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('productAdmin.table.price')}</th>
                   <th className="px-6 py-3 text-left rtl:text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('productAdmin.table.stock')}</th>
                   <th className="px-6 py-3 text-left rtl:text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('productAdmin.table.type')}</th>
+                  <th className="px-6 py-3 text-left rtl:text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('productAdmin.table.visibility')}</th>
                   <th className="px-6 py-3 text-left rtl:text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('productAdmin.table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {products.map(product => (
+                {products.map(product => {
+                  const isVisible = product.isVisible === undefined ? true : product.isVisible;
+                  return (
                   <tr key={product.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <img src={product.imageUrl} alt={product.name} className="w-12 h-12 object-cover rounded"/>
@@ -389,12 +448,27 @@ const ProductAdminScreen: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 capitalize">
                         {product.quantityType === 'kg' ? t('productAdmin.quantityKg') : t('productAdmin.quantityUnit')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 rtl:space-x-reverse">
-                      <Button onClick={() => openModalForEdit(product)} variant="secondary" size="sm">{t('productAdmin.edit')}</Button>
-                      <Button onClick={() => handleDelete(product.id)} variant="danger" size="sm">{t('productAdmin.delete')}</Button>
+                     <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          isVisible ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {isVisible ? t('productAdmin.visible') : t('productAdmin.hidden')}
+                        </span>
+                      </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-1 rtl:space-x-reverse">
+                      <Button onClick={() => openModalForEdit(product)} variant="secondary" size="sm" className="!px-2 !py-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+                      </Button>
+                      <Button onClick={() => handleToggleVisibility(product)} variant="secondary" size="sm" className="!px-2 !py-1" aria-label={isVisible ? t('aria.setHidden') : t('aria.setVisible')}>
+                        {isVisible ? <EyeSlashIcon className="w-4 h-4"/> : <EyeIcon className="w-4 h-4"/>}
+                      </Button>
+                      <Button onClick={() => handleDelete(product.id)} variant="danger" size="sm" className="!px-2 !py-1">
+                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12.56 0c.34-.059.68-.111 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09.991-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                      </Button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -431,7 +505,7 @@ const ProductAdminScreen: React.FC = () => {
                   {t('productAdmin.modal.imageUpload')}
                 </label>
                 <input
-                  id="imageUrl" name="imageUrlFile" type="file"
+                  id="imageUrlFile" name="imageUrlFile" type="file" // Name changed to avoid conflict with currentProduct.imageUrl
                   accept="image/*"
                   onChange={handleImageChange}
                   className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
@@ -442,7 +516,14 @@ const ProductAdminScreen: React.FC = () => {
                     <img src={imagePreview} alt="Preview" className="h-24 w-auto object-contain rounded border border-gray-200 mt-1"/>
                   </div>
                 )}
-                {errors.imageUrl && <p className="mt-1 text-xs text-red-500">{errors.imageUrl}</p>}
+                <InputField
+                    label={t('productAdmin.modal.imageUrlLabel')}
+                    id="imageUrl" name="imageUrl" type="text"
+                    value={currentProduct.imageUrl || ''}
+                    onChange={handleInputChange}
+                    error={errors.imageUrl} required
+                    placeholder={t('productAdmin.modal.imageUrlPlaceholder')}
+                />
               </div>
               <InputField
                 label={t('productAdmin.modal.barcode')}
@@ -471,6 +552,20 @@ const ProductAdminScreen: React.FC = () => {
                 onChange={handleInputChange} error={errors.stock}
                 min="0" step="1" required
               />
+               <div className="flex items-center space-x-2 rtl:space-x-reverse">
+                <input
+                  type="checkbox"
+                  id="isVisible"
+                  name="isVisible"
+                  checked={currentProduct.isVisible === undefined ? true : currentProduct.isVisible}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <label htmlFor="isVisible" className="text-sm font-medium text-gray-700">
+                  {t('productAdmin.modal.isVisibleLabel')}
+                </label>
+              </div>
+
               <div className="flex justify-end space-x-3 rtl:space-x-reverse pt-4">
                 <Button type="button" variant="secondary" onClick={closeModal}>{t('productAdmin.modal.cancel')}</Button>
                 <Button type="submit" variant="primary">{isEditMode ? t('productAdmin.modal.saveChanges') : t('productAdmin.modal.addProduct')}</Button>

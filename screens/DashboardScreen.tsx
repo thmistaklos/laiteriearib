@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { OrderType, OrderStatus, OrderItemType, Product } from '../types';
 import { ALL_ORDER_STATUSES } from '../constants';
@@ -30,11 +29,25 @@ const OrderStatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
 
 
 const DashboardScreen: React.FC = () => {
-  const { orders, updateOrderStatus, userSession, getProductById, products: allProducts } = useAppContext();
+  const { 
+    orders, 
+    updateOrderStatus, 
+    userSession, 
+    getProductById, 
+    products: allProducts, 
+    isAdmin, 
+    markAdminDashboardViewed 
+  } = useAppContext();
   const { t, language } = useTranslation();
   const navigate = useNavigate();
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (isAdmin) {
+      markAdminDashboardViewed();
+    }
+  }, [isAdmin, markAdminDashboardViewed]);
 
   const enrichedOrders = useMemo(() => {
     return orders.map(order => ({
@@ -62,11 +75,16 @@ const DashboardScreen: React.FC = () => {
      navigate('/login');
      return null;
   }
+   if (!isAdmin) { 
+    navigate('/main');
+    return null;
+  }
+
 
   const calculateOrderTotal = useCallback((order: OrderType) => {
     if (order.totalAmount !== undefined) return order.totalAmount;
     return order.items.reduce((sum, item) => {
-        const product = item.product; // Already enriched
+        const product = item.product; 
         return sum + (product?.price || 0) * item.quantity;
     }, 0);
   }, []);
@@ -204,24 +222,16 @@ const DashboardScreen: React.FC = () => {
                             <h4 className="text-md font-semibold mb-3 text-indigo-700">{t('dashboard.orderDetailsFor', {orderId: order.id.substring(0,15) + '...'})}</h4>
                             <div className="space-y-3">
                               {order.items.map((item: OrderItemType) => {
-                                 const productDetails = item.product; // Already enriched
-                                 const priceInfo = productDetails?.price ? t('dashboard.priceAt', {price: productDetails.price.toFixed(2)}) : '';
+                                 const productDetails = item.product; 
                                  const itemSubtotal = productDetails?.price ? (productDetails.price * item.quantity).toFixed(2) : '0.00';
-                                 const quantityTypeDisplay = productDetails.quantityType === 'kg' ? t('productAdmin.quantityKg') : t('productAdmin.quantityUnit');
-
+                                 
                                  return (
                                   <div key={item.product.id} className="p-3 bg-white rounded shadow-sm border border-gray-200">
-                                    <p className="font-medium text-gray-800">{productDetails?.name || item.product.id}</p>
-                                    <p className="text-sm text-gray-600">
-                                      {t('dashboard.productDetails', {
-                                        productName: "", // Name is already displayed
-                                        quantity: item.quantity, 
-                                        quantityType: quantityTypeDisplay,
-                                        priceInfo: priceInfo
-                                      })}
+                                    <p className="font-medium text-gray-800">
+                                      {productDetails?.name || item.product.id} ({t('dashboard.itemQuantity', {quantity: item.quantity})})
                                     </p>
-                                    <p className="text-sm text-gray-600 font-semibold">
-                                      {t('dashboard.itemSubtotal', {subtotal: itemSubtotal})}
+                                    <p className="text-sm text-gray-600">
+                                      {t('dashboard.itemSubtotalLabel')} <span className="font-bold">{t('currency.format', {amount: itemSubtotal})}</span>
                                     </p>
                                   </div>
                                  );

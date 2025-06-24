@@ -6,7 +6,7 @@ import { useTranslation } from '../hooks/useTranslation';
 import Button from './Button';
 
 const Navbar: React.FC = () => {
-  const { userSession, logout, isAdmin } = useAppContext();
+  const { userSession, logout, isAdmin, showAdminOrderNotification } = useAppContext();
   const { t, language, setLanguage } = useTranslation();
   const navigate = useNavigate();
 
@@ -58,17 +58,20 @@ const Navbar: React.FC = () => {
                     <NavLink
                       to="/dashboard"
                       className={({ isActive }) =>
-                        `px-2 py-1 sm:px-3 sm:py-2 rounded-md text-xs sm:text-sm font-medium ${
+                        `relative px-2 py-1 sm:px-3 sm:py-2 rounded-md text-xs sm:text-sm font-medium ${
                           isActive ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                         }`
                       }
                     >
                       {t('navbar.dashboard')}
+                      {isAdmin && showAdminOrderNotification && (
+                        <span className="absolute top-1 right-1 block h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+                      )}
                     </NavLink>
                     <NavLink
                       to="/admin/products"
                       className={({ isActive }) =>
-                        `hidden sm:block px-3 py-2 rounded-md text-sm font-medium ${
+                        `px-2 py-1 sm:px-3 sm:py-2 rounded-md text-xs sm:text-sm font-medium ${ // Applied responsive classes and removed 'hidden'
                           isActive ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                         }`
                       }

@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { Product, OrderType } from './types'; // Assuming types.ts defines these
 
@@ -10,12 +11,12 @@ export interface Database {
         Row: Product; // Product type from your types.ts
         Insert: Product; // Client provides ID, so this is the full Product type
         Update: Partial<Product>; // For updating products
-      };
+      }
       orders: {
         Row: OrderType; // OrderType from your types.ts
         Insert: OrderType; // Client provides ID, so this is the full OrderType
         Update: Partial<OrderType>;
-      };
+      }
       sessions: {
         Row: {
           id: string; // UUID
@@ -23,24 +24,24 @@ export interface Database {
           store_name: string;
           created_at: string;
           last_active_at: string;
-        };
+        }
         Insert: {
           id: string;
           email: string;
           store_name: string;
           last_active_at?: string; // created_at is handled by db
-        };
+        }
         Update: {
           last_active_at?: string;
-        };
-      };
+        }
+      }
     };
     Views: {
       [_ in never]: never;
-    };
+    }
     Functions: {
       [_ in never]: never;
-    };
+    }
   };
 }
 
