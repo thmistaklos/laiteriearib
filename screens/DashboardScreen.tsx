@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { OrderType, OrderStatus, OrderItemType, Product } from '../types';
@@ -228,10 +229,14 @@ const DashboardScreen: React.FC = () => {
                                  return (
                                   <div key={item.product.id} className="p-3 bg-white rounded shadow-sm border border-gray-200">
                                     <p className="font-medium text-gray-800">
-                                      {productDetails?.name || item.product.id} ({t('dashboard.itemQuantity', {quantity: item.quantity})})
+                                      {productDetails?.name || item.product.id}
                                     </p>
                                     <p className="text-sm text-gray-600">
-                                      {t('dashboard.itemSubtotalLabel')} <span className="font-bold">{t('currency.format', {amount: itemSubtotal})}</span>
+                                      {t('dashboard.itemQuantity', {quantity: item.quantity})}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      {t('dashboard.itemSubtotalLabel')}{' '}
+                                      <span className="font-semibold">{t('currency.format', {amount: itemSubtotal})}</span>
                                     </p>
                                   </div>
                                  );

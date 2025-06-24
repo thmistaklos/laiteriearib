@@ -13,7 +13,7 @@ import InputField from '../components/InputField';
 type ViewMode = 'grid' | 'list';
 
 const MainScreen: React.FC = () => {
-  const { userSession, addOrder, products } = useAppContext();
+  const { userSession, addOrder, products, isAdmin } = useAppContext(); // Added isAdmin
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +34,7 @@ const MainScreen: React.FC = () => {
   }, [searchTerm, visibleProducts]);
 
   const handleAddToCart = useCallback((product: Product, quantity: number) => {
+    if (isAdmin) return; // Admins cannot add to cart
     setCurrentOrderItems(prevItems => {
       const existingItem = prevItems.find(item => item.product.id === product.id);
       if (existingItem) {
@@ -45,19 +46,21 @@ const MainScreen: React.FC = () => {
       }
       return [...prevItems, { product, quantity }];
     });
-  }, []);
+  }, [isAdmin]);
 
   const handleQuantityChange = useCallback((productId: string, newQuantity: number) => {
+    if (isAdmin) return; // Admins cannot change quantity
     setCurrentOrderItems(prevItems =>
       prevItems.map(item =>
         item.product.id === productId ? { ...item, quantity: newQuantity } : item
       ).filter(item => item.quantity > 0) 
     );
-  }, []);
+  }, [isAdmin]);
 
   const handleRemoveItem = useCallback((productId: string) => {
+    if (isAdmin) return; // Admins cannot remove items
     setCurrentOrderItems(prevItems => prevItems.filter(item => item.product.id !== productId));
-  }, []);
+  }, [isAdmin]);
 
   const calculateTotal = useMemo(() => {
     return currentOrderItems.reduce((total, item) => {
@@ -66,6 +69,7 @@ const MainScreen: React.FC = () => {
   }, [currentOrderItems]);
 
   const handleSubmitOrder = async () => {
+    if (isAdmin) return; // Admins cannot submit orders
     if (!userSession || currentOrderItems.length === 0) {
       alert(t('main.emptyOrder')); 
       return;
@@ -100,7 +104,8 @@ const MainScreen: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <header className="mb-6">
           <h1 className="text-4xl font-bold text-gray-800">{t('main.productCatalog')}</h1>
-          {userSession && <p className="text-lg text-gray-600">{t('main.browseMessage', { storeName: userSession.storeName })}</p>}
+          {userSession && !isAdmin && <p className="text-lg text-gray-600">{t('main.browseMessage', { storeName: userSession.storeName })}</p>}
+          {userSession && isAdmin && <p className="text-lg text-indigo-600">{t('main.adminOrderingDisabled')}</p>}
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -141,18 +146,18 @@ const MainScreen: React.FC = () => {
               viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {filteredProducts.map(product => (
-                    <ProductCard key={product.id} product={product} onAddToCart={handleAddToCart} />
+                    <ProductCard key={product.id} product={product} onAddToCart={handleAddToCart} isAdmin={isAdmin} />
                   ))}
                 </div>
               ) : (
                 <div className="space-y-4">
                   {filteredProducts.map(product => (
-                    <ProductListItem key={product.id} product={product} onAddToCart={handleAddToCart} />
+                    <ProductListItem key={product.id} product={product} onAddToCart={handleAddToCart} isAdmin={isAdmin} />
                   ))}
                 </div>
               )
             ) : (
-               visibleProducts.length === 0 ? ( // Check against visibleProducts instead of products
+               visibleProducts.length === 0 ? ( 
                 <p className="text-center text-gray-500 py-10 text-lg">{t('main.noProductsAvailable')}</p>
               ) : (
                 <p className="text-center text-gray-500 py-10 text-lg">{t('main.noProductsFound')}</p>
@@ -160,44 +165,46 @@ const MainScreen: React.FC = () => {
             )}
           </div>
 
-          <div className="lg:col-span-1">
-            <div className="bg-white p-6 rounded-lg shadow-xl sticky top-24">
-              <h2 className="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">{t('main.yourOrder')}</h2>
-              {currentOrderItems.length === 0 ? (
-                <p className="text-gray-500">{t('main.emptyOrder')}</p>
-              ) : (
-                <>
-                  <div className="max-h-96 overflow-y-auto space-y-1 mb-4 pr-2 rtl:pr-0 rtl:pl-2">
-                    {currentOrderItems.map(item => (
-                      <OrderItemRow
-                        key={item.product.id}
-                        item={item}
-                        onQuantityChange={handleQuantityChange}
-                        onRemoveItem={handleRemoveItem}
-                      />
-                    ))}
-                  </div>
-                  <div className="border-t pt-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-lg font-semibold text-gray-700">{t('main.total')}</span>
-                      <span className="text-2xl font-bold text-indigo-600">
-                        {t('currency.format', { amount: calculateTotal.toFixed(2) })}
-                      </span>
+          {!isAdmin && (
+            <div className="lg:col-span-1">
+              <div className="bg-white p-6 rounded-lg shadow-xl sticky top-24">
+                <h2 className="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">{t('main.yourOrder')}</h2>
+                {currentOrderItems.length === 0 ? (
+                  <p className="text-gray-500">{t('main.emptyOrder')}</p>
+                ) : (
+                  <>
+                    <div className="max-h-96 overflow-y-auto space-y-1 mb-4 pr-2 rtl:pr-0 rtl:pl-2">
+                      {currentOrderItems.map(item => (
+                        <OrderItemRow
+                          key={item.product.id}
+                          item={item}
+                          onQuantityChange={handleQuantityChange}
+                          onRemoveItem={handleRemoveItem}
+                        />
+                      ))}
                     </div>
-                    <Button
-                      onClick={handleSubmitOrder}
-                      variant="success"
-                      size="lg"
-                      className="w-full"
-                      disabled={currentOrderItems.length === 0}
-                    >
-                      {t('main.submitOrder')}
-                    </Button>
-                  </div>
-                </>
-              )}
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-lg font-semibold text-gray-700">{t('main.total')}</span>
+                        <span className="text-2xl font-bold text-indigo-600">
+                          {t('currency.format', { amount: calculateTotal.toFixed(2) })}
+                        </span>
+                      </div>
+                      <Button
+                        onClick={handleSubmitOrder}
+                        variant="success"
+                        size="lg"
+                        className="w-full"
+                        disabled={currentOrderItems.length === 0}
+                      >
+                        {t('main.submitOrder')}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
       {showOrderSubmittedModal && (

@@ -7,9 +7,10 @@ import { useTranslation } from '../hooks/useTranslation';
 interface ProductListItemProps {
   product: Product;
   onAddToCart: (product: Product, quantity: number) => void;
+  isAdmin?: boolean;
 }
 
-const ProductListItem: React.FC<ProductListItemProps> = ({ product, onAddToCart }) => {
+const ProductListItem: React.FC<ProductListItemProps> = ({ product, onAddToCart, isAdmin = false }) => {
   const [quantity, setQuantity] = useState<number>(1);
   const { t } = useTranslation();
 
@@ -23,7 +24,7 @@ const ProductListItem: React.FC<ProductListItemProps> = ({ product, onAddToCart 
   const decrementQuantity = () => setQuantity(prev => (prev > 1 ? prev - 1 : 1));
 
   const handleAddToCart = () => {
-    if (quantity > 0) {
+    if (quantity > 0 && !isAdmin) {
       onAddToCart(product, quantity);
       setQuantity(1);
     }
@@ -51,6 +52,7 @@ const ProductListItem: React.FC<ProductListItemProps> = ({ product, onAddToCart 
             variant="secondary" 
             className="px-2 py-1! w-8 h-8 flex items-center justify-center"
             aria-label={t('aria.decrementQuantity')}
+            disabled={isAdmin}
           >-</Button>
           <label htmlFor={`quantity-list-${product.id}`} className="sr-only">
              {t('productCard.quantity', { productName: product.name })}
@@ -63,6 +65,7 @@ const ProductListItem: React.FC<ProductListItemProps> = ({ product, onAddToCart 
             min="1"
             className="w-16 text-center border-gray-300 rounded-md shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
             aria-live="polite"
+            disabled={isAdmin}
           />
           <Button 
             onClick={incrementQuantity} 
@@ -70,9 +73,17 @@ const ProductListItem: React.FC<ProductListItemProps> = ({ product, onAddToCart 
             variant="secondary" 
             className="px-2 py-1! w-8 h-8 flex items-center justify-center"
             aria-label={t('aria.incrementQuantity')}
+            disabled={isAdmin}
           >+</Button>
         </div>
-        <Button onClick={handleAddToCart} variant="primary" size="sm" className="w-full sm:w-auto">
+        <Button 
+            onClick={handleAddToCart} 
+            variant="primary" 
+            size="sm" 
+            className="w-full sm:w-auto"
+            disabled={isAdmin}
+            title={isAdmin ? t('main.adminOrderingDisabled', { defaultValue: 'Admins cannot place orders' }) : t('main.addToOrder')}
+        >
           {t('main.addToOrder')}
         </Button>
       </div>
