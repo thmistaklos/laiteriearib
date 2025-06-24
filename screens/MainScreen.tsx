@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../contexts/AppContext';
-import { Product, OrderItemType } from '../types';
+import { Product, OrderItemType, OrderType } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
 import ProductCard from '../components/ProductCard';
 import ProductListItem from '../components/ProductListItem'; // New component for list view
@@ -61,23 +61,31 @@ const MainScreen: React.FC = () => {
     }, 0);
   }, [currentOrderItems]);
 
-  const handleSubmitOrder = () => {
+  const handleSubmitOrder = async () => {
     if (!userSession || currentOrderItems.length === 0) {
       alert(t('main.emptyOrder')); 
       return;
     }
-    const submittedOrder = addOrder({
+    // addOrder returns Promise<OrderType | null>
+    const submittedOrder: OrderType | null = await addOrder({
       storeName: userSession.storeName,
       userEmail: userSession.email,
       items: currentOrderItems,
       totalAmount: calculateTotal,
     });
-    setCurrentOrderItems([]); 
-    setShowOrderSubmittedModal(true);
-    setTimeout(() => {
-        setShowOrderSubmittedModal(false);
-        navigate(`/confirmation/${submittedOrder.id}`);
-    }, 2000);
+    
+    if (submittedOrder && submittedOrder.id) {
+      setCurrentOrderItems([]); 
+      setShowOrderSubmittedModal(true);
+      setTimeout(() => {
+          setShowOrderSubmittedModal(false);
+          navigate(`/confirmation/${submittedOrder.id}`);
+      }, 2000);
+    } else {
+      // Handle the case where order submission might have failed or returned null
+      console.error("Order submission failed or submittedOrder is null/undefined.");
+      alert(t('main.orderSubmissionFailed', {defaultValue: 'Order submission failed. Please try again.'})); 
+    }
   };
   
   if (!userSession) {

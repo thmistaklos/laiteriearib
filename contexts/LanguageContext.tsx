@@ -9,6 +9,7 @@ interface LanguageContextType {
   setLanguage: (language: Language) => void;
   t: (key: string, replacements?: Record<string, string | number>) => string;
   translations: Record<string, string>;
+  isLoading: boolean; // Exposed isLoading state
 }
 
 export const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -38,7 +39,19 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
       console.error("Error loading translations:", error);
       // Fallback to English if current language fails
       if (lang !== 'en') {
-        await fetchTranslations('en');
+        // Attempt to fetch English translations as a fallback
+        try {
+            const enResponse = await fetch(`/locales/en/translation.json`);
+            if (enResponse.ok) {
+                const enData = await enResponse.json();
+                setTranslations(enData);
+            } else {
+                 setTranslations({}); // Clear translations if English also fails
+            }
+        } catch (enError) {
+            console.error("Error loading fallback English translations:", enError);
+            setTranslations({});
+        }
       } else {
         setTranslations({}); // Clear translations if English itself fails
       }
@@ -71,15 +84,10 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     return translation;
   }, [translations]);
   
-  if (isLoading) {
-    // You might want a more sophisticated loading state here,
-    // but for now, we'll just delay rendering children.
-    // Or, ensure AppContext's loader handles this.
-    return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div></div>;
-  }
-
+  // Render children immediately. The t function will fallback to keys if translations aren't loaded yet.
+  // The AppContext's isLoading (if AppContext is a child or parent managing global load) or other specific loading indicators should handle visual loading states.
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, translations }}>
+    <LanguageContext.Provider value={{ language, setLanguage, t, translations, isLoading }}>
       {children}
     </LanguageContext.Provider>
   );
